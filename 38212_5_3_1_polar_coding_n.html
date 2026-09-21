@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polar 码长 N 的确定 动态图解</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1a1d23; --muted:#5b6472; --line:#e3e7ee; --card:#f7f9fc;
+  --i:#2563eb;   --i-bg:#dbeafe;
+  --q:#ea580c;   --q-bg:#ffedd5;
+  --sym:#7c3aed; --sym-bg:#ede9fe;
+  --ok:#16a34a;  --ok-bg:#dcfce7;
+  --no:#dc2626;  --no-bg:#fee2e2;
+  --warn:#b45309;--warn-bg:#fef3c7;
+  --accent:#7c3aed;
+  --idle:#dde3ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1216; --fg:#e6e9ef; --muted:#98a2b3; --line:#252b34; --card:#161b22;
+    --i:#60a5fa;   --i-bg:#1e3a5f;
+    --q:#fb923c;   --q-bg:#432818;
+    --sym:#a78bfa; --sym-bg:#2e1065;
+    --ok:#4ade80;  --ok-bg:#14331f;
+    --no:#f87171;  --no-bg:#450d0d;
+    --warn:#fbbf24;--warn-bg:#422006;
+    --accent:#a78bfa;
+    --idle:#2b323c;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.75;font-size:16px}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px}
+h1{font-size:1.9rem;margin:0 0 6px;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:0 0 8px;font-size:.95rem}
+h2{font-size:1.3rem;margin:48px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+h3{font-size:1.05rem;margin:26px 0 10px}
+h4{font-size:.98rem;margin:22px 0 8px}
+p{margin:12px 0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;
+  background:var(--card);padding:2px 6px;border-radius:4px;border:1px solid var(--line)}
+pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;
+  overflow-x:auto;font-size:.85rem;line-height:1.55}
+pre code{background:none;border:none;padding:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:18px 0}
+.note{border-left:4px solid var(--accent);background:var(--card);padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0}
+.note b{color:var(--accent)}
+.warn{border-left:4px solid var(--warn);background:var(--warn-bg);padding:13px 16px;margin:16px 0;border-radius:0 8px 8px 0}
+.warn b{color:var(--warn)}
+.formula{font-family:ui-monospace,monospace;background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:14px 16px;margin:12px 0;font-size:.9rem;overflow-x:auto;text-align:center}
+.controls{display:flex;flex-wrap:wrap;gap:11px;align-items:center;margin:16px 0}
+button{font:inherit;font-size:.88rem;padding:6px 13px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line);background:var(--card);color:var(--fg);transition:.15s}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.sm{font-size:.8rem;padding:4px 9px}
+label{font-size:.88rem;color:var(--muted);display:inline-flex;align-items:center;gap:7px}
+select,input[type=number],input[type=text]{font:inherit;font-family:ui-monospace,monospace;font-size:.88rem;
+  padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+input[type=range]{accent-color:var(--accent)}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:.86rem}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--card);font-weight:600}
+tr.hi{background:var(--sym-bg)}
+ul{padding-left:22px} li{margin:7px 0}
+ol{padding-left:22px} ol li{margin:7px 0}
+.small{font-size:.85rem;color:var(--muted)}
+.stat{font-family:ui-monospace,monospace;font-size:.86rem;color:var(--muted);margin:8px 0}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.83rem;margin:10px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:3px;display:inline-block}
+.verdict{padding:10px 14px;border-radius:8px;font-weight:600;margin:9px 0;font-size:.9rem}
+.verdict.ok{background:var(--ok-bg);color:var(--ok)}
+.verdict.bad{background:var(--no-bg);color:var(--no)}
+.counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:9px;margin:12px 0}
+.cnt{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center}
+.cnt .n{font-size:1.2rem;font-weight:700;font-family:ui-monospace,monospace;line-height:1.15}
+.cnt .l{font-size:.68rem;color:var(--muted);margin-top:2px}
+.box{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0}
+.box h5{margin:0 0 6px;font-size:.84rem;color:var(--muted);font-weight:600;
+  display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.box svg{width:100%;height:auto;display:block}
+.tip{font-family:ui-monospace,monospace;font-size:.8rem;background:var(--card);
+  border:1px solid var(--line);border-radius:7px;padding:9px 11px;margin:8px 0;min-height:2.4em}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:760px){ .two{grid-template-columns:1fr} }
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:12px;margin:14px 0}
+.step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.step .h{font-size:.78rem;color:var(--accent);font-weight:700;margin-bottom:4px}
+.step .b{font-family:ui-monospace,monospace;font-size:.8rem;line-height:1.8}
+.step .r{font-family:ui-monospace,monospace;font-size:1rem;font-weight:700;margin-top:6px}
+.step.win{border-color:var(--sym);border-width:2px}
+mark{background:var(--sym-bg);color:var(--sym);padding:1px 4px;border-radius:3px}
+.bar{display:flex;align-items:center;gap:9px;margin:6px 0;font-size:.84rem}
+.bar .lb{width:88px;flex:0 0 auto;color:var(--muted);font-family:ui-monospace,monospace}
+.bar .fill{height:24px;border-radius:5px;display:flex;align-items:center;padding:0 9px;
+  color:#fff;font-weight:600;font-size:.76rem;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Polar 码长 N 的确定</h1>
+<p class="sub">3GPP TS 38.212 §5.3.1 · 动态图解 · n₁ / n₂ 与两个门限实算</p>
+
+<div class="note">
+<b>一句话</b>：Polar 码的码长 <b>N 必须是 2 的整数次幂</b>，
+所以协议要在"够装得下信息"和"别浪费太多"之间挑一个 2 的幂。
+挑法是<b>算三个候选、取中间</b>：
+<b>n₁ 由发送长度 E 定</b>、<b>n₂ 由信息量 K 与最低码率 1/8 定</b>，再夹在 [n<sub>min</sub>, n<sub>max</sub>] 之间。
+</div>
+
+<h2>一、原文</h2>
+
+<div class="card" style="font-style:italic">
+"The bit sequence input for a given code block to channel coding is denoted by
+c<sub>0</sub>, c<sub>1</sub>, …, c<sub>K−1</sub>, where K is the number of bits to encode.
+After encoding the bits are denoted by d<sub>0</sub>, d<sub>1</sub>, …, d<sub>N−1</sub>,
+where <b>N = 2<sup>n</sup></b> and the value of n is determined by the following:
+<div class="formula" style="font-style:normal;margin:10px 0;text-align:left;font-size:.84rem">
+Denote by E the rate matching output sequence length as given in Clause 5.4.1;<br><br>
+<b>If</b> E ≤ (9/8)·2<sup>(⌈log₂E⌉−1)</sup> <b>and</b> K/E &lt; 9/16<br>
+　　n₁ = ⌈log₂E⌉ − 1;<br>
+<b>else</b><br>
+　　n₁ = ⌈log₂E⌉;<br>
+<b>end if</b><br><br>
+R<sub>min</sub> = 1/8;<br>
+n₂ = ⌈log₂(K / R<sub>min</sub>)⌉;<br>
+<b>n = max{ min{ n₁, n₂, n<sub>max</sub> }, n<sub>min</sub> }</b>　where n<sub>min</sub> = 5.
+</div>
+UE is not expected to be configured with K + n<sub>PC</sub> &gt; E, where n<sub>PC</sub> is the
+number of parity check bits defined in Clause 5.3.1.2."
+</div>
+
+<h3>译文（逐句对照）</h3>
+
+<div class="card">
+<p style="margin:0 0 10px">给定码块送入信道编码的比特序列记为
+c<sub>0</sub>, c<sub>1</sub>, c<sub>2</sub>, c<sub>3</sub>, …, c<sub>K−1</sub>，
+其中 K 是待编码的比特数。编码后的比特记为
+d<sub>0</sub>, d<sub>1</sub>, d<sub>2</sub>, …, d<sub>N−1</sub>，
+其中 <b>N = 2<sup>n</sup></b>，n 的取值由下述流程确定：</p>
+
+<div class="formula" style="margin:10px 0;text-align:left;font-size:.84rem">
+以 E 表示 5.4.1 节给出的速率匹配输出序列长度；<br><br>
+<b>如果</b> E ≤ (9/8)·2<sup>(⌈log₂E⌉−1)</sup> <b>并且</b> K/E &lt; 9/16<br>
+　　n₁ = ⌈log₂E⌉ − 1；<br>
+<b>否则</b><br>
+　　n₁ = ⌈log₂E⌉；<br>
+<b>结束判断</b><br><br>
+R<sub>min</sub> = 1/8；<br>
+n₂ = ⌈log₂(K / R<sub>min</sub>)⌉；<br>
+<b>n = max{ min{ n₁, n₂, n<sub>max</sub> }, n<sub>min</sub> }</b>
+</div>
+
+<p style="margin:0 0 10px">其中 n<sub>min</sub> = 5。</p>
+
+<p style="margin:0">不期望 UE 被配置成 K + n<sub>PC</sub> &gt; E，
+其中 n<sub>PC</sub> 是 5.3.1.2 节定义的校验比特数。</p>
+</div>
+
+<table>
+<tr><th style="width:16%">符号</th><th style="width:26%">读作</th><th>意思</th></tr>
+<tr><td><b>c<sub>k</sub></b> / <b>K</b></td><td>输入比特 / 其个数</td>
+    <td>要编码的比特。PDCCH 里 <b>K = DCI 负荷 A + 24 位 CRC</b></td></tr>
+<tr><td><b>d<sub>k</sub></b> / <b>N</b></td><td>编码输出 / 码长</td>
+    <td>Polar 编码器的输出，<b>N 必须是 2 的幂</b>（第二节）</td></tr>
+<tr><td><b>n</b></td><td>—</td><td>指数，N = 2<sup>n</sup>。整节要求的就是这个 n</td></tr>
+<tr><td><b>E</b></td><td>rate matching output length</td>
+    <td><b>最终真正要发多少位</b>（由物理资源决定）。PDCCH 里 <b>E = 108 × AL</b></td></tr>
+<tr><td><b>⌈x⌉</b></td><td>向上取整</td><td>⌈log₂E⌉ = "不小于 E 的最小 2 的幂"的指数</td></tr>
+<tr><td><b>n₁</b></td><td>—</td><td>候选一：<b>由 E 定的码长基准</b>（第四节）</td></tr>
+<tr><td><b>n₂</b></td><td>—</td><td>候选二：<b>由 K 和最低码率定的上限</b>（第三节）</td></tr>
+<tr><td><b>R<sub>min</sub> = 1/8</b></td><td>最低码率</td>
+    <td>不允许比 1/8 更低的码率 —— 再低只是浪费资源，编码增益已饱和</td></tr>
+<tr><td><b>n<sub>max</sub></b> / <b>n<sub>min</sub></b></td><td>硬边界</td>
+    <td><b>DCI 与 PBCH：n<sub>max</sub> = 9</b>（§7.3.3 / §7.1.4）；UCI：n<sub>max</sub> = 10。n<sub>min</sub> = 5</td></tr>
+<tr><td><b>n<sub>PC</sub></b></td><td>parity check bits</td>
+    <td>PC-Polar 的额外校验位。<b>DCI 与 PBCH 都是 0</b>，所以约束简化成 K ≤ E</td></tr>
+</table>
+
+<h2>二、为什么 N 非得是 2 的幂</h2>
+
+<p>Polar 编码的核心是<b>反复两两组合</b>：把长度 N 的问题拆成两个 N/2、再拆成四个 N/4……
+一路拆到底。这个结构<b>只有在 N 是 2 的幂时才对齐</b>：</p>
+
+<div class="formula" style="text-align:left;font-size:.84rem">
+N = 8：　　 ●─┐　●─┐　●─┐　●─┐　　第 1 级：两两异或<br>
+　　　　　　 ●─┴┐●─┴┐●─┴┐●─┴┐　第 2 级：隔 2 组合<br>
+　　　　　　 ●──┴●──┴●──┴●──┴　　第 3 级：隔 4 组合　→　共 log₂N = 3 级
+</div>
+
+<p>但<b>物理资源给的 E 不会那么听话</b>（PDCCH 是 108×AL：108、216、432、864、1728，一个都不是 2 的幂）。
+所以协议的做法是：<b>先挑一个 2 的幂当 N 编码，再用速率匹配把 N 调成 E</b>。</p>
+
+<div class="two">
+  <div class="card"><b>N &gt; E：要<b style="color:var(--no)">删</b></b><br>
+  多编出来的位<b>打孔（puncture）或缩短（shorten）</b>丢掉。<br>
+  <span class="small">删太多会破坏 Polar 码的可靠性排序 —— 这正是第四节两个门限要防的事。</span></div>
+  <div class="card"><b>N &lt; E：要<b style="color:var(--ok)">补</b></b><br>
+  把编出来的位<b>重复（repeat）</b>到够 E 位。<br>
+  <span class="small">重复是"白送"的能量增益，代价小，所以协议宁可选小 N 去重复。</span></div>
+</div>
+
+<h2>三、三个候选，取中间那个</h2>
+
+<div class="formula">
+n = <b>max</b>{ <b>min</b>{ n₁, n₂, n<sub>max</sub> }, n<sub>min</sub> }
+</div>
+
+<p>读法：<b>先取小的（min），再兜底（max）</b>。三个候选各有各的职责：</p>
+
+<table>
+<tr><th style="width:14%">候选</th><th>由谁决定</th><th>它在防什么</th></tr>
+<tr><td><b>n₁</b></td><td><b>E</b>（要发多少位）</td>
+    <td>防"码长和发送长度差太远" —— 差太远就得大量打孔或大量重复</td></tr>
+<tr><td><b>n₂</b></td><td><b>K</b> 与 R<sub>min</sub> = 1/8</td>
+    <td>防"码率低于 1/8" —— N 再大也不会让性能更好，纯浪费算力和内存</td></tr>
+<tr><td><b>n<sub>max</sub></b></td><td>信道类型</td>
+    <td><b>硬上限</b>。DCI/PBCH = 9 → N ≤ 512，UE 侧译码复杂度和存储的天花板</td></tr>
+<tr><td><b>n<sub>min</sub></b></td><td>常数 5</td>
+    <td><b>硬下限</b>。N ≥ 32，太短的 Polar 码没有编码增益</td></tr>
+</table>
+
+<h3>n₂ 为什么等于 ⌈log₂(8K)⌉</h3>
+
+<div class="formula" style="text-align:left">
+码率 R = K / N ≥ R<sub>min</sub> = 1/8　⟺　N ≤ 8K　⟺　n ≤ log₂(8K)
+</div>
+
+<p class="small">注意原文写的是 <b>⌈</b>log₂(K/R<sub>min</sub>)<b>⌉</b> 向<b>上</b>取整 ——
+它不是严格的"不超过 8K"，而是"不超过<b>不小于 8K 的那个 2 的幂</b>"。
+因为 N 只能取 2 的幂，向上取整给的是<b>刚够用的那一档</b>。</p>
+
+<h2>四、两个门限 9/8 和 9/16 在干什么</h2>
+
+<p>这是全节最需要解读的地方。条件是：</p>
+
+<div class="formula" style="text-align:left">
+<b>如果</b>　E ≤ (9/8) · 2<sup>⌈log₂E⌉−1</sup>　<b>并且</b>　K/E &lt; 9/16<br>
+<b>那么</b>　n₁ 取<b>小</b>的那一档（⌈log₂E⌉ − 1），<b>否则</b>取大的那一档（⌈log₂E⌉）
+</div>
+
+<div class="card">
+<b>把 2<sup>⌈log₂E⌉−1</sup> 记作 N<sub>下</sub>（比 E 小的那档 2 的幂），条件就好读了：</b>
+<ul>
+<li><b>E ≤ 1.125 × N<sub>下</sub></b> —— E 只比下面那一档<b>超出不到 12.5%</b>。
+    这时选小的 N，只需<b>少量重复</b>就能补到 E；选大的 N 反而要<b>打掉将近一半</b>。</li>
+<li><b>K/E &lt; 9/16 ≈ 0.5625</b> —— 码率<b>不太高</b>。码率本来就高的时候，
+    再选小 N 会让实际码率 K/N 突破安全范围，宁可用大 N 打孔。</li>
+</ul>
+<b>两个条件必须同时满足</b>才敢往小选 —— 一个管"省得划算"，一个管"省得起"。
+</div>
+
+<div class="controls">
+  <label>E = <input type="range" id="fe" min="32" max="1200" value="108" style="width:250px">
+    <span class="stat" id="fev" style="margin:0"></span></label>
+  <label>K = <input type="number" id="fk" value="65" min="1" max="512" style="width:82px"></label>
+</div>
+<div class="tip" id="fOut"></div>
+<div class="box">
+  <h5><span>随 E 变化：n₁ 何时取小的那一档（绿色区间 = 条件成立）</span><span id="fStat"></span></h5>
+  <svg id="fchart" viewBox="0 0 1000 240"></svg>
+</div>
+
+<div class="note">
+<b>一句话：这两个门限是在"少量重复"和"大量打孔"之间做选择。</b>
+Polar 码怕打孔 —— 被打掉的位置会扰乱可靠性排序，凍结位选得就不准了。
+而重复只是把同一位发两遍，接收端合并起来<b>纯赚</b>。
+所以协议的偏好很明确：<b>能靠重复解决的，就别用打孔。</b>
+</div>
+
+<h2>五、算一遍：从 DCI 负荷到 N</h2>
+
+<div class="controls">
+  <label>输入方式
+    <select id="mode"><option value="0" selected>按 PDCCH（A 与 AL）</option><option value="1">直接给 K 与 E</option></select></label>
+  <span id="wrapA">
+    <label>DCI 负荷 A = <input type="number" id="ia" value="41" min="1" max="200" style="width:78px"></label>
+    <label>AL = <select id="ial"><option>1</option><option>2</option><option selected>4</option><option>8</option><option>16</option></select></label>
+  </span>
+  <span id="wrapB" style="display:none">
+    <label>K = <input type="number" id="ik" value="65" min="1" max="512" style="width:78px"></label>
+    <label>E = <input type="number" id="ie" value="432" min="1" max="2000" style="width:88px"></label>
+  </span>
+  <label>n<sub>max</sub> <select id="inmax"><option value="9" selected>9（DCI / PBCH）</option><option value="10">10（UCI）</option></select></label>
+</div>
+
+<div class="steps">
+  <div class="step" id="st1"><div class="h">候选 n₁（由 E）</div><div class="b" id="st1b"></div><div class="r" id="st1r"></div></div>
+  <div class="step" id="st2"><div class="h">候选 n₂（由 K）</div><div class="b" id="st2b"></div><div class="r" id="st2r"></div></div>
+  <div class="step" id="st3"><div class="h">夹进 [n_min, n_max]</div><div class="b" id="st3b"></div><div class="r" id="st3r"></div></div>
+</div>
+
+<div class="counts" id="rCnt"></div>
+<div class="bar" id="bar1"></div>
+<div class="verdict" id="rOk"></div>
+
+<h2>六、PDCCH 全景：五个聚合等级的 N</h2>
+
+<p>PDCCH 的 E 只有五种（E = 108 × AL），K = A + 24。把常见 DCI 尺寸代进去：</p>
+
+<div class="controls">
+  <button id="panRun" class="primary">现场算全景表</button>
+</div>
+<table id="panTab"></table>
+
+<div class="box">
+  <h5><span>N 随 (K, E) 的分布 —— 颜色 = N，竖线 = 五个 AL 对应的 E</span><span id="hmStat"></span></h5>
+  <svg id="hm" viewBox="0 0 1000 300"></svg>
+</div>
+
+<div class="note">
+<b>看出两件事：</b>
+<ul>
+<li><b>AL = 1 / 2 / 4 时都是打孔</b>（N = 128/256/512 分别大于 E = 108/216/432，删 20/40/80 位）；
+    <b>AL = 8 / 16 时变成大量重复</b>（N 被 n<sub>max</sub> = 9 顶在 512，而 E 是 864 / 1728，
+    要补 352 / 1216 位）。<b>转折点就在 AL = 8：N 撞上上限之后，多给的资源只能靠重复消化。</b></li>
+<li><b>AL 每翻一倍，码率 K/E 就减半</b> —— 这就是聚合等级的意义：
+    <b>用更多资源换更低码率、更强纠错</b>，而不是换更多信息量。</li>
+</ul>
+</div>
+
+<h2>七、cuPHY 实现：同一件事，用 N 而不是 n</h2>
+
+<p>cuPHY 全程<b>不算指数 n，直接算 N</b>（省掉 log 和 pow）：</p>
+
+<pre><code>// polar_encoder.cu:1071  （另一份 CPU 版在 :1101，逻辑相同）
+uint32_t        nMin1CodedBits         = roundUpToPow2_nTxBits / 2;      // = 2^(⌈log2 E⌉ − 1)
+constexpr float INFO_TX_BITS_RATIO_THD = (9.0f / 16.0f);
+if((nTxBits &gt; (9 * nMin1CodedBits) / 8) ||
+   ((static_cast&lt;float&gt;(nInfoBits) / static_cast&lt;float&gt;(nTxBits)) &gt;= INFO_TX_BITS_RATIO_THD))
+{
+    nMin1CodedBits *= 2;                                                 // → 2^⌈log2 E⌉
+}
+
+uint32_t nMin2CodedBits = roundUpToPow2Gpu(nInfoBits * MIN_CODE_RATE_INV);   // MIN_CODE_RATE_INV = 8
+uint32_t nMinCodedBits  = (nMin1CodedBits &lt; nMin2CodedBits) ? nMin1CodedBits : nMin2CodedBits;
+
+uint32_t nCodedBits = nMinCodedBits;
+if(nCodedBits &lt; N_MIN_CODED_BITS) nCodedBits = N_MIN_CODED_BITS;   // 32  = 2^5
+if(nCodedBits &gt; N_MAX_CODED_BITS) nCodedBits = N_MAX_CODED_BITS;   // 512 = 2^9</code></pre>
+
+<h3>逐项对应</h3>
+
+<table>
+<tr><th style="width:38%">cuPHY</th><th>协议</th></tr>
+<tr><td><code>roundUpToPow2(nTxBits) / 2</code></td><td>2<sup>⌈log₂E⌉−1</sup></td></tr>
+<tr><td><code>nTxBits &gt; (9 * nMin1CodedBits) / 8</code></td><td>E ≤ (9/8)·2<sup>⌈log₂E⌉−1</sup> 的<b>否命题</b></td></tr>
+<tr><td><code>nInfoBits / nTxBits &gt;= 9.0f/16.0f</code></td><td>K/E &lt; 9/16 的<b>否命题</b></td></tr>
+<tr><td><code>if(A || B) nMin1CodedBits *= 2;</code></td><td><code>if(!A &amp;&amp; !B) n₁ = ⌈log₂E⌉−1; else n₁ = ⌈log₂E⌉;</code></td></tr>
+<tr><td><code>roundUpToPow2(nInfoBits * 8)</code></td><td>2<sup>⌈log₂(K/R<sub>min</sub>)⌉</sup>，R<sub>min</sub> = 1/8</td></tr>
+<tr><td><code>min</code> 后先夹 32 再夹 512</td><td>max{ min{n₁,n₂,n<sub>max</sub>}, n<sub>min</sub> }</td></tr>
+</table>
+
+<div class="card">
+<b>为什么两个条件在 cuPHY 里变成了"或"：</b>协议说"<b>A 且 B</b> → 取小"，
+cuPHY 反过来问"什么时候<b>不</b>取小"，答案就是"<b>非A 或 非B</b>" —— 这就是<b>德摩根律</b>：
+<div class="formula" style="margin:10px 0">¬(A ∧ B) ⟺ (¬A) ∨ (¬B)</div>
+写成"或"的好处是<b>短路求值</b>：第一个条件成立就不必再算那个浮点除法。
+</div>
+
+<div class="controls">
+  <button id="eqRun" class="primary">全量对拍：协议公式 vs cuPHY 算法</button>
+  <label>K 范围 1…<select id="eqK"><option>200</option><option selected>400</option><option>600</option></select></label>
+</div>
+<table id="eqTab"></table>
+<div class="verdict ok" id="eqOk"></div>
+
+<div class="warn">
+<b>cuPHY 把 512 写死了。</b><code>N_MAX_CODED_BITS = 512</code> 对应 n<sub>max</sub> = 9，
+只适用于 <b>DCI 与 PBCH</b>。UCI 走 Polar 时 n<sub>max</sub> = 10（N 可到 1024），
+这个常量在 PDCCH 链路上没问题，<b>不能直接复用到上行 UCI 编码</b>。
+</div>
+
+<h2>八、那条约束：K + n<sub>PC</sub> ≤ E</h2>
+
+<p>"UE is not expected to be configured with K + n<sub>PC</sub> &gt; E" ——
+<b>要发的位数不能少于信息位数</b>，否则连原始信息都装不下，怎么编都救不回来。</p>
+
+<p>DCI 与 PBCH 的 n<sub>PC</sub> = 0（§7.3.3 / §7.1.4 明确设 n<sub>PC</sub> = 0、n<sub>PC</sub><sup>wm</sup> = 0），
+所以约束就是 <b>K ≤ E</b>。代进 PDCCH：</p>
+
+<div class="controls">
+  <button id="cRun" class="primary">检查五个 AL 各能装多大的 DCI</button>
+</div>
+<table id="cTab"></table>
+
+<div class="note">
+<b>"is not expected to be configured" 是协议的一种特殊说法</b>：
+它<b>不是</b>"禁止"，而是"<b>不保证</b>" —— 基站要是真这么配了，
+UE 的行为未定义，协议不追究。<b>责任在调度器</b>。
+cuPHY 侧同样不做这个检查，依赖 L2 保证。
+</div>
+
+<p class="small" style="margin-top:40px;padding-top:16px;border-top:1px solid var(--line)">
+本页的 n₁ / n₂ / n 推导、两个门限的判定区间、PDCCH 全景表与 (K,E) 热图、
+以及"协议公式 vs cuPHY 整数算法"的全量对拍，
+全部由页面内 JavaScript 按 38.212 §5.3.1 实时计算，未使用任何外部库。
+原文引自本地 TS 38.212 V17.13.0 第 14 页；n<sub>max</sub> = 9、n<sub>PC</sub> = 0 出自同版 §7.3.3（DCI）与 §7.1.4（PBCH）；
+实现片段引自 cuBB <code>cuPHY/src/cuphy/polar_encoder/polar_encoder.cu</code> 与 <code>polar_encoder.hpp</code>。
+</p>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var NMIN = 5;
+
+/* ============ 协议公式（精确有理比较，避免浮点误差） ============ */
+function ceilLog2(x){
+  var n = 0, v = 1;
+  while (v < x){ v *= 2; n++; }
+  return n;
+}
+function specN(K, E, nmax){
+  var ce = ceilLog2(E), Nlow = Math.pow(2, ce - 1);
+  /* E ≤ (9/8)·Nlow  ⟺  8E ≤ 9·Nlow ；K/E < 9/16 ⟺ 16K < 9E —— 全整数比较 */
+  var condA = (8 * E <= 9 * Nlow);
+  var condB = (16 * K < 9 * E);
+  var n1 = (condA && condB) ? (ce - 1) : ce;
+  var n2 = ceilLog2(K * 8);
+  var n  = Math.max(Math.min(n1, n2, nmax), NMIN);
+  return { ce:ce, Nlow:Nlow, condA:condA, condB:condB, n1:n1, n2:n2, n:n, N:Math.pow(2, n) };
+}
+/* ============ cuPHY 算法（照抄整数/浮点写法） ============ */
+function roundUpToPow2(x){
+  var v = 1;
+  while (v < x) v *= 2;
+  return v;
+}
+function cuphyN(K, E, nmaxN){
+  var N1 = roundUpToPow2(E) / 2;
+  if ((E > Math.floor((9 * N1) / 8)) || ((K / E) >= (9.0 / 16.0))) N1 *= 2;
+  var N2 = roundUpToPow2(K * 8);
+  var N = Math.min(N1, N2);
+  if (N < 32) N = 32;
+  if (N > nmaxN) N = nmaxN;
+  return N;
+}
+
+/* ============ 四、门限交互 ============ */
+function drawThresh(){
+  var E = +$('fe').value | 0, K = +$('fk').value | 0;
+  $('fev').textContent = 'E = ' + E;
+  var o = specN(K, E, 9);
+  var pctOver = ((E / o.Nlow - 1) * 100);
+  $('fOut').innerHTML =
+    '⌈log₂' + E + '⌉ = ' + o.ce + '　→　N<sub>下</sub> = 2<sup>' + (o.ce-1) + '</sup> = <b>' + o.Nlow +
+    '</b>，N<sub>上</sub> = 2<sup>' + o.ce + '</sup> = <b>' + (o.Nlow*2) + '</b><br>' +
+    '条件① E ≤ (9/8)×' + o.Nlow + ' = ' + (9*o.Nlow/8).toFixed(1) + '　→　' + E + ' ' +
+    (o.condA ? '≤' : '&gt;') + ' ' + (9*o.Nlow/8).toFixed(1) + '　' +
+    (o.condA ? '<b style="color:var(--ok)">成立</b>' : '<b style="color:var(--no)">不成立</b>') +
+    '（E 比 N<sub>下</sub> 超出 ' + pctOver.toFixed(1) + '%，门限 12.5%）<br>' +
+    '条件② K/E = ' + K + '/' + E + ' = ' + (K/E).toFixed(4) + ' &lt; 0.5625　→　' +
+    (o.condB ? '<b style="color:var(--ok)">成立</b>' : '<b style="color:var(--no)">不成立</b>') + '<br>' +
+    '→　n₁ = <mark>' + o.n1 + '</mark>（' + (o.condA && o.condB ? '取小的那一档' : '取大的那一档') +
+    '），2<sup>n₁</sup> = <b>' + Math.pow(2, o.n1) + '</b>';
+
+  /* 曲线：对每个 E，条件是否成立 */
+  var W = 1000, L = 46, R = 20, T = 14, B = 34, H = 240;
+  var eMin = 32, eMax = 1200;
+  function X(v){ return L + (v - eMin)/(eMax - eMin) * (W - L - R); }
+  function Y(v){ return T + (1 - v/11) * (H - T - B); }
+  var g = '';
+  for (var n = 5; n <= 11; n++){
+    g += '<line x1="' + L + '" y1="' + Y(n).toFixed(1) + '" x2="' + (W-R) + '" y2="' + Y(n).toFixed(1) +
+         '" stroke="var(--line)"/><text x="' + (L-8) + '" y="' + (Y(n)+4).toFixed(1) +
+         '" font-size="10" text-anchor="end" fill="var(--muted)" font-family="ui-monospace,monospace">n=' + n + '</text>';
+  }
+  /* 绿色区间：条件成立的 E */
+  var seg = null;
+  for (var e = eMin; e <= eMax; e++){
+    var oo = specN(K, e, 9), on = oo.condA && oo.condB;
+    if (on && seg === null) seg = e;
+    if ((!on || e === eMax) && seg !== null){
+      g += '<rect x="' + X(seg).toFixed(1) + '" y="' + T + '" width="' + Math.max(1, X(e)-X(seg)).toFixed(1) +
+           '" height="' + (H-T-B) + '" fill="var(--ok)" fill-opacity=".14"/>';
+      seg = null;
+    }
+  }
+  /* n1 与 n 曲线 */
+  var p1 = '', p2 = '';
+  for (e = eMin; e <= eMax; e += 2){
+    var q = specN(K, e, 9);
+    p1 += (p1 ? 'L' : 'M') + X(e).toFixed(1) + ' ' + Y(q.n1).toFixed(1);
+    p2 += (p2 ? 'L' : 'M') + X(e).toFixed(1) + ' ' + Y(q.n).toFixed(1);
+  }
+  g += '<path d="' + p1 + '" fill="none" stroke="var(--i)" stroke-width="2"/>' +
+       '<path d="' + p2 + '" fill="none" stroke="var(--sym)" stroke-width="2" stroke-dasharray="6 3"/>';
+  [108,216,432,864].forEach(function(ev){
+    if (ev < eMin || ev > eMax) return;
+    g += '<line x1="' + X(ev).toFixed(1) + '" y1="' + T + '" x2="' + X(ev).toFixed(1) + '" y2="' + (H-B) +
+         '" stroke="var(--q)" stroke-dasharray="3 3" opacity=".7"/>' +
+         '<text x="' + X(ev).toFixed(1) + '" y="' + (T+11) + '" font-size="9" text-anchor="middle" fill="var(--q)">' + ev + '</text>';
+  });
+  g += '<circle cx="' + X(E).toFixed(1) + '" cy="' + Y(o.n1).toFixed(1) + '" r="5" fill="var(--i)"/>';
+  for (var t = 0; t <= 1200; t += 200)
+    if (t >= eMin) g += '<text x="' + X(t).toFixed(1) + '" y="' + (H-B+16) + '" font-size="10" text-anchor="middle" ' +
+      'fill="var(--muted)" font-family="ui-monospace,monospace">' + t + '</text>';
+  g += '<text x="' + (W/2) + '" y="' + (H-6) + '" font-size="11" text-anchor="middle" fill="var(--muted)">E</text>' +
+       '<text x="' + (L+10) + '" y="' + (T+12) + '" font-size="10" fill="var(--i)">实线 n₁</text>' +
+       '<text x="' + (L+80) + '" y="' + (T+12) + '" font-size="10" fill="var(--sym)">虚线 最终 n</text>';
+  $('fchart').innerHTML = g;
+  $('fStat').textContent = 'K = ' + K + ' 固定 · 橙色竖线 = PDCCH 的 E';
+}
+['fe','fk'].forEach(function(id){ $(id).addEventListener('input', drawThresh); });
+
+/* ============ 五、计算器 ============ */
+function curKE(){
+  if ($('mode').value === '0'){
+    var A = +$('ia').value | 0, AL = +$('ial').value | 0;
+    return { K: A + 24, E: 108 * AL, A:A, AL:AL };
+  }
+  return { K: +$('ik').value | 0, E: +$('ie').value | 0, A:null, AL:null };
+}
+function drawCalc(){
+  $('wrapA').style.display = ($('mode').value === '0') ? '' : 'none';
+  $('wrapB').style.display = ($('mode').value === '1') ? '' : 'none';
+  var ke = curKE(), K = ke.K, E = ke.E, nmax = +$('inmax').value | 0;
+  if (K < 1 || E < 1) return;
+  var o = specN(K, E, nmax);
+
+  $('st1b').innerHTML = '⌈log₂' + E + '⌉ = ' + o.ce + '　N<sub>下</sub> = ' + o.Nlow + '<br>' +
+    '① E ≤ 9/8·N<sub>下</sub>：' + (o.condA ? '✓' : '✗') + '　② K/E &lt; 9/16：' + (o.condB ? '✓' : '✗');
+  $('st1r').innerHTML = 'n₁ = ' + o.n1 + '　(2<sup>' + o.n1 + '</sup> = ' + Math.pow(2,o.n1) + ')';
+  $('st2b').innerHTML = 'K / R<sub>min</sub> = ' + K + ' × 8 = ' + (K*8) + '<br>⌈log₂' + (K*8) + '⌉';
+  $('st2r').innerHTML = 'n₂ = ' + o.n2 + '　(2<sup>' + o.n2 + '</sup> = ' + Math.pow(2,o.n2) + ')';
+  $('st3b').innerHTML = 'min{' + o.n1 + ', ' + o.n2 + ', ' + nmax + '} = ' + Math.min(o.n1,o.n2,nmax) +
+    '<br>max{ 上式, ' + NMIN + ' }';
+  $('st3r').innerHTML = '<mark>n = ' + o.n + '　N = ' + o.N + '</mark>';
+  ['st1','st2','st3'].forEach(function(id){ $(id).classList.remove('win'); });
+  var winner = (Math.min(o.n1,o.n2,nmax) === o.n1) ? 'st1' : ((Math.min(o.n1,o.n2,nmax) === o.n2) ? 'st2' : 'st3');
+  if (o.n === NMIN || Math.min(o.n1,o.n2,nmax) === nmax) winner = 'st3';
+  $(winner).classList.add('win');
+
+  var rel = (o.N > E) ? ['打孔 / 缩短', (o.N - E) + ' 位被删', 'var(--no)']
+          : ((o.N < E) ? ['重复', (E - o.N) + ' 位被重发', 'var(--ok)'] : ['正好', '不删不补', 'var(--i)']);
+  $('rCnt').innerHTML = [
+    ['K', K, ke.A !== null ? 'A=' + ke.A + ' + 24 CRC' : '输入'],
+    ['E', E, ke.AL !== null ? '108 × AL' + ke.AL : '输入'],
+    ['n', o.n, 'max{min{n₁,n₂,n_max},5}'],
+    ['N = 2ⁿ', o.N, rel[0]],
+    ['母码率 K/N', (K/o.N).toFixed(3), 'R_min = 0.125'],
+    ['实际码率 K/E', (K/E).toFixed(3), '空口上的码率']
+  ].map(function(c){
+    return '<div class="cnt"><div class="n">' + c[1] + '</div><div class="l">' + c[0] + '<br>' + c[2] + '</div></div>';
+  }).join('');
+
+  var mx = Math.max(o.N, E);
+  $('bar1').innerHTML =
+    '<span class="lb">N = ' + o.N + '</span><div class="fill" style="background:var(--i);width:' +
+    (o.N/mx*70 + 8).toFixed(1) + '%">Polar 编码输出</div>' +
+    '<span class="lb" style="margin-left:14px">E = ' + E + '</span><div class="fill" style="background:' + rel[2] +
+    ';width:' + (E/mx*70 + 8).toFixed(1) + '%">' + rel[0] + '：' + rel[1] + '</div>';
+
+  var cn = cuphyN(K, E, Math.pow(2, nmax));
+  var kle = (K <= E);
+  $('rOk').className = 'verdict ' + (cn === o.N && kle ? 'ok' : 'bad');
+  $('rOk').innerHTML = (cn === o.N
+      ? '✓ cuPHY 算法给出同样的 N = ' + cn
+      : '✗ cuPHY 算法给出 N = ' + cn + '，与协议 ' + o.N + ' 不符') +
+    '　│　约束 K + n<sub>PC</sub> ≤ E：' + K + ' ≤ ' + E + ' → ' +
+    (kle ? '<b>满足</b>' : '<b>违反 —— 协议说 UE 不期望被这样配置</b>') +
+    '　│　码率 R = K/N = ' + (K/o.N).toFixed(3) + (K/o.N < 0.125 ? '（已触及 R_min）' : '');
+}
+['mode','ia','ial','ik','ie','inmax'].forEach(function(id){
+  $(id).addEventListener('input', drawCalc); $(id).addEventListener('change', drawCalc);
+});
+
+/* ============ 六、全景 ============ */
+$('panRun').addEventListener('click', function(){
+  var As = [12, 24, 36, 41, 57, 88, 140];
+  var t = '<tr><th>AL</th><th>E = 108·AL</th>';
+  As.forEach(function(A){ t += '<th>A=' + A + '<br><span class="small">K=' + (A+24) + '</span></th>'; });
+  t += '</tr>';
+  [1,2,4,8,16].forEach(function(AL){
+    var E = 108 * AL;
+    t += '<tr><td><b>' + AL + '</b></td><td>' + E + '</td>';
+    As.forEach(function(A){
+      var K = A + 24, o = specN(K, E, 9);
+      var rel = o.N > E ? '删' + (o.N-E) : (o.N < E ? '补' + (E-o.N) : '正好');
+      var col = o.N > E ? 'var(--no)' : (o.N < E ? 'var(--ok)' : 'var(--i)');
+      t += '<td>N=<b>' + o.N + '</b><br><span class="small" style="color:' + col + '">' + rel +
+           '</span><br><span class="small">R=' + (K/E).toFixed(2) + '</span></td>';
+    });
+    t += '</tr>';
+  });
+  $('panTab').innerHTML = t;
+
+  /* 热图 */
+  var W = 1000, L = 46, R = 20, T = 14, B = 34, H = 300;
+  var kMin = 20, kMax = 200, eMin = 32, eMax = 1800;
+  var cols = 120, rows = 60;
+  var g = '';
+  var pal = { 32:'#94a3b8', 64:'#60a5fa', 128:'#2563eb', 256:'#7c3aed', 512:'#ea580c' };
+  for (var ix = 0; ix < cols; ix++){
+    for (var iy = 0; iy < rows; iy++){
+      var E = Math.round(eMin + ix/(cols-1)*(eMax-eMin));
+      var K = Math.round(kMin + iy/(rows-1)*(kMax-kMin));
+      var N = specN(K, E, 9).N;
+      var x = L + ix/cols*(W-L-R), y = T + (1 - (iy+1)/rows)*(H-T-B);
+      g += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + ((W-L-R)/cols+0.6).toFixed(1) +
+           '" height="' + ((H-T-B)/rows+0.6).toFixed(1) + '" fill="' + (pal[N] || '#000') + '" fill-opacity=".85"/>';
+    }
+  }
+  [108,216,432,864,1728].forEach(function(ev){
+    var x = L + (ev-eMin)/(eMax-eMin)*(W-L-R);
+    g += '<line x1="' + x.toFixed(1) + '" y1="' + T + '" x2="' + x.toFixed(1) + '" y2="' + (H-B) +
+         '" stroke="#fff" stroke-dasharray="4 3" opacity=".85"/>' +
+         '<text x="' + x.toFixed(1) + '" y="' + (H-B+16) + '" font-size="10" text-anchor="middle" ' +
+         'fill="var(--muted)" font-family="ui-monospace,monospace">' + ev + '</text>';
+  });
+  g += '<text x="' + (L-8) + '" y="' + (T+10) + '" font-size="10" text-anchor="end" fill="var(--muted)">K=' + kMax + '</text>' +
+       '<text x="' + (L-8) + '" y="' + (H-B) + '" font-size="10" text-anchor="end" fill="var(--muted)">K=' + kMin + '</text>' +
+       '<text x="' + (W/2) + '" y="' + (H-4) + '" font-size="11" text-anchor="middle" fill="var(--muted)">E</text>';
+  var lx = L + 10;
+  Object.keys(pal).forEach(function(k){
+    g += '<rect x="' + lx + '" y="' + (T+4) + '" width="12" height="12" fill="' + pal[k] + '"/>' +
+         '<text x="' + (lx+16) + '" y="' + (T+14) + '" font-size="10" fill="#fff">' + k + '</text>';
+    lx += 58;
+  });
+  $('hm').innerHTML = g;
+  $('hmStat').textContent = 'n_max = 9 · K ∈ [' + kMin + ',' + kMax + '] · E ∈ [' + eMin + ',' + eMax + ']';
+});
+
+/* ============ 七、全量对拍 ============ */
+$('eqRun').addEventListener('click', function(){
+  var KM = +$('eqK').value | 0, tested = 0, bad = 0, first = [];
+  for (var K = 1; K <= KM; K++){
+    for (var E = 1; E <= 2000; E++){
+      var a = specN(K, E, 9).N, b = cuphyN(K, E, 512);
+      tested++;
+      if (a !== b){ bad++; if (first.length < 5) first.push([K, E, a, b]); }
+    }
+  }
+  var t = '<tr><th>检查项</th><th>结果</th></tr>';
+  t += '<tr><td>测试组合数（K = 1…' + KM + '，E = 1…2000）</td><td><b>' + tested.toLocaleString() + '</b></td></tr>';
+  t += '<tr><td>协议公式与 cuPHY 算法不一致</td><td><b>' + bad + '</b></td></tr>';
+  t += '<tr><td>协议侧比较方式</td><td>全整数：<code>8E ≤ 9·N下</code> 与 <code>16K &lt; 9E</code></td></tr>';
+  t += '<tr><td>cuPHY 侧比较方式</td><td>整数除法 <code>(9*N1)/8</code> + 单精度 <code>K/E &gt;= 9.0f/16.0f</code></td></tr>';
+  first.forEach(function(f){
+    t += '<tr class="hi"><td>不一致样例</td><td>K=' + f[0] + ' E=' + f[1] + ' 协议 ' + f[2] + ' cuPHY ' + f[3] + '</td></tr>';
+  });
+  $('eqTab').innerHTML = t;
+  $('eqOk').className = 'verdict ' + (bad === 0 ? 'ok' : 'bad');
+  $('eqOk').innerHTML = bad === 0
+    ? '✓ ' + tested.toLocaleString() + ' 组全部一致 —— cuPHY 的整数除法与浮点比较<b>没有引入偏差</b>，' +
+      '德摩根变形也等价'
+    : '✗ 有 ' + bad + ' 组不一致（见上表样例）';
+});
+
+/* ============ 八、K ≤ E ============ */
+$('cRun').addEventListener('click', function(){
+  var t = '<tr><th>AL</th><th>E = 108·AL</th><th>K 上限（= E）</th><th>对应 DCI 负荷 A 上限</th><th>此时码率 K/E</th><th>N</th></tr>';
+  [1,2,4,8,16].forEach(function(AL){
+    var E = 108*AL, Amax = E - 24;
+    var o = specN(E, E, 9);
+    t += '<tr><td><b>' + AL + '</b></td><td>' + E + '</td><td>' + E + '</td><td>' + Amax +
+      ' 位<br><span class="small">实际 DCI 远小于此（最大约 140 位）</span></td><td>1.00</td><td>' + o.N + '</td></tr>';
+  });
+  $('cTab').innerHTML = t;
+});
+
+/* 初始化 */
+drawThresh();
+drawCalc();
+$('panRun').click();
+$('eqRun').click();
+$('cRun').click();
+})();
+</script>
+</body>
+</html>
